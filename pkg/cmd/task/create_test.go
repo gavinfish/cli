@@ -17,12 +17,15 @@ func TestTaskCreate(t *testing.T) {
 	clock := clockwork.NewFakeClock()
 
 	seeds := make([]pipelinetest.Clients, 0)
-	cs, _ := test.SeedTestData(t, pipelinetest.Data{})
-	seeds = append(seeds, cs)
+	for i := 0; i < 3; i++ {
+		cs, _ := test.SeedTestData(t, pipelinetest.Data{})
+		seeds = append(seeds, cs)
+	}
+
 	tasks := []*v1alpha1.Task{
 		tb.Task("build-docker-image-from-git-source", "ns", cb.TaskCreationTime(clock.Now().Add(-1*time.Minute))),
 	}
-	cs, _ = test.SeedTestData(t, pipelinetest.Data{Tasks: tasks})
+	cs, _ := test.SeedTestData(t, pipelinetest.Data{Tasks: tasks})
 	seeds = append(seeds, cs)
 
 	testParams := []struct {
@@ -35,8 +38,16 @@ func TestTaskCreate(t *testing.T) {
 	}{
 		{
 			name:        "Create successfully",
-			command:     []string{"create", "-f", "../../../test/resources/task.yaml", "-n", "ns"},
+			command:     []string{"create", "--from", "../../../test/resources/task.yaml", "-n", "ns"},
 			input:       seeds[0],
+			inputStream: nil,
+			wantError:   false,
+			want:        "Task created: task.yaml\n",
+		},
+		{
+			name:        "Create successfully",
+			command:     []string{"create", "-f", "../../../test/resources/task.yaml", "-n", "ns"},
+			input:       seeds[1],
 			inputStream: nil,
 			wantError:   false,
 			want:        "Task created: task.yaml\n",
@@ -44,7 +55,7 @@ func TestTaskCreate(t *testing.T) {
 		{
 			name:        "Filename with wildcard",
 			command:     []string{"create", "-f", "../../../test/resources/*.yaml", "-n", "ns"},
-			input:       seeds[0],
+			input:       seeds[1],
 			inputStream: nil,
 			wantError:   true,
 			want:        "open ../../../test/resources/*.yaml: The filename, directory name, or volume label syntax is incorrect.",
@@ -52,7 +63,7 @@ func TestTaskCreate(t *testing.T) {
 		{
 			name:        "Filename does not exist",
 			command:     []string{"create", "-f", "test/resources/task.yaml", "-n", "ns"},
-			input:       seeds[0],
+			input:       seeds[1],
 			inputStream: nil,
 			wantError:   true,
 			want:        "open test/resources/task.yaml: The system cannot find the path specified.",
@@ -60,15 +71,15 @@ func TestTaskCreate(t *testing.T) {
 		{
 			name:        "Unsupported file type",
 			command:     []string{"create", "-f", "../../../test/resources/task.txt", "-n", "ns"},
-			input:       seeds[0],
+			input:       seeds[1],
 			inputStream: nil,
 			wantError:   true,
 			want:        "does not support such extension for ../../../test/resources/task.txt",
 		},
 		{
-			name:        "Missing filename",
+			name:        "Missing from",
 			command:     []string{"create", "-n", "ns", "-f"},
-			input:       seeds[0],
+			input:       seeds[1],
 			inputStream: nil,
 			wantError:   true,
 			want:        "flag needs an argument: 'f' in -f",
@@ -76,15 +87,23 @@ func TestTaskCreate(t *testing.T) {
 		{
 			name:        "Mismatched resource file",
 			command:     []string{"create", "-f", "../../../test/resources/taskrun.yaml", "-n", "ns"},
-			input:       seeds[0],
+			input:       seeds[1],
 			inputStream: nil,
 			wantError:   true,
 			want:        "provided TaskRun instead of Task kind",
 		},
 		{
+			name:        "",
+			command:     []string{"create", "-f", "https://gist.githubusercontent.com/gavinfish/bab9ee1b0d068f8c0f33c92417dcf178/raw/5a4da2ecc1090f4877af2ab02da74424b5166eb2/task.yaml", "-n", "ns"},
+			input:       seeds[2],
+			inputStream: nil,
+			wantError:   false,
+			want:        "Task created: task.yaml\n",
+		},
+		{
 			name:        "Existing task",
 			command:     []string{"create", "-f", "../../../test/resources/task.yaml", "-n", "ns"},
-			input:       seeds[1],
+			input:       seeds[3],
 			inputStream: nil,
 			wantError:   true,
 			want:        "task \"build-docker-image-from-git-source\" has already exists in namespace ns",

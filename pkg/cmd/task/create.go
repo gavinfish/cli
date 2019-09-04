@@ -15,9 +15,11 @@
 package task
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -30,12 +32,13 @@ import (
 )
 
 type createOptions struct {
-	filename string
+	from string
+	edit bool
 }
 
 func createCommand(p cli.Params) *cobra.Command {
 	f := cliopts.NewPrintFlags("create")
-	opts := &createOptions{filename: ""}
+	opts := &createOptions{from: ""}
 	eg := `
 # Create a Task defined by foo.yaml in namespace 'bar'
 tkn task create -f foo.yaml -n bar
@@ -56,11 +59,12 @@ tkn task create -f foo.yaml -n bar
 				Err: cmd.OutOrStderr(),
 			}
 
-			return createTask(s, p, opts.filename)
+			return createTask(s, p, opts.from)
 		},
 	}
 	f.AddFlags(c)
-	c.Flags().StringVarP(&opts.filename, "filename", "f", "", "Filename to use to create the resource")
+	c.Flags().StringVarP(&opts.from, "from", "f", "", "Filename to use to create the resource")
+	c.Flags().BoolVar(&opts.edit, "edit", false, "Edit the task resource before creating")
 	return c
 }
 
@@ -93,9 +97,20 @@ func loadFileContent(target string) ([]byte, error) {
 	var content []byte
 	var err error
 	if strings.HasSuffix(target, ".yaml") || strings.HasSuffix(target, ".yml") {
-		content, err = ioutil.ReadFile(target)
-		if err != nil {
-			return nil, err
+		if strings.HasPrefix(target, "http") {
+			resp, err := http.Get(target)
+			if err != nil {
+				return nil, err
+			}
+			defer resp.Body.Close()
+			buf := new(bytes.Buffer)
+			_, err = buf.ReadFrom(resp.Body)
+			content = buf.Bytes()
+		} else {
+			content, err = ioutil.ReadFile(target)
+			if err != nil {
+				return nil, err
+			}
 		}
 		content, err = yaml.YAMLToJSON(content)
 		if err != nil {
@@ -123,3 +138,21 @@ func loadTask(target string) (*v1alpha1.Task, error) {
 	}
 	return &task, nil
 }
+
+//func RunEditOnCreate(printFlags *genericclioptions.PrintFlags, recordFlags *genericclioptions.RecordFlags, ioStreams genericclioptions.IOStreams, cmd *cobra.Command) {
+//
+//	editOptions := editor.NewEditOptions(editor.EditBeforeCreateMode, ioStreams)
+//	//editOptions.FilenameOptions = *options
+//	//editOptions.ValidateOptions = cmdutil.ValidateOptions{
+//	//	EnableValidation: cmdutil.GetFlagBool(cmd, "validate"),
+//	//}
+//	editOptions.PrintFlags = printFlags
+//	editOptions.ApplyAnnotation = cmdutil.GetFlagBool(cmd, cmdutil.ApplyAnnotationsFlag)
+//	editOptions.RecordFlags = recordFlags
+//
+//	err := editOptions.Complete(f, []string{}, cmd)
+//	if err != nil {
+//		return err
+//	}
+//	return editOptions.Run()
+//}
